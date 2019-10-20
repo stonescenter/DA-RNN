@@ -38,7 +38,7 @@ def parse_args():
 
     # Dataset setting
     parser.add_argument('--dataroot', type=str, default="../data/nasdaq100_padding-short.csv", help='path to dataset')
-    #parser.add_argument('--dataroot', type=str, default="~/Dropbox/data/BTC-USD-4H.csv", help='path to dataset')
+    #parser.add_argument('--dataroot', type=str, default="../data/BTC-USD-4H-24F.csv", help='path to dataset')
     
     parser.add_argument('--batchsize', type=int, default=128, help='input batch size [128]')
 
@@ -78,11 +78,11 @@ def main():
     batch_size = 128
 
     #X, y = read_data(args.dataroot, normalise=True, debug=False)
-    X, y = load_data_series('../data/BTC-USD-4H-24F.csv', n_features, idx_class, Normalise)
-    y = y.reshape(-1,)
+    #X, y = load_data_series('../data/BTC-USD-4H-24F.csv', n_features, idx_class, Normalise)
+    #y = y.reshape(-1,)
 
-    print(X.shape)
-    print(y.shape)
+    #print(X.shape)
+    #print(y.shape)
 
 
     dataset = TimeSeriesData('../data/BTC-USD-4H-24F.csv', n_features, idx_class, Normalise)
@@ -91,8 +91,8 @@ def main():
     print(X.shape)
     print(y.shape)
 
-    #dataset_train = TimeSeriesData('~/Dropbox/data/BTC-USD-4H-24F-train.csv', n_features, idx_class, Normalise)
-    #dataset_test = TimeSeriesData('~/Dropbox/data/BTC-USD-4H-24F-test.csv', n_features, idx_class, Normalise)
+    #dataset_train = TimeSeriesData('../data/BTC-USD-4H-24F-train.csv', n_features, idx_class, Normalise)
+    #dataset_test = TimeSeriesData('../data/BTC-USD-4H-24F-test.csv', n_features, idx_class, Normalise)
     
     # cargamos os loaders
     train_loader = DataLoader(dataset=dataset, batch_size=batch_size, shuffle=True)

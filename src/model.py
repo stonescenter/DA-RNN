@@ -57,10 +57,8 @@ class Encoder(nn.Module):
             X
 
         """
-        X_tilde = Variable(X.data.new(
-            X.size(0), self.T - 1, self.input_size).zero_())
-        X_encoded = Variable(X.data.new(
-            X.size(0), self.T - 1, self.encoder_num_hidden).zero_())
+        X_tilde = Variable(X.data.new(X.size(0), self.T - 1, self.input_size).zero_())
+        X_encoded = Variable(X.data.new(X.size(0), self.T - 1, self.encoder_num_hidden).zero_())
 
         # Eq. 8, parameters not in nn.Linear but to be learnt
         # v_e = torch.nn.Parameter(data=torch.empty(
@@ -78,8 +76,7 @@ class Encoder(nn.Module):
                            s_n.repeat(self.input_size, 1, 1).permute(1, 0, 2),
                            X.permute(0, 2, 1)), dim=2)
 
-            x = self.encoder_attn(
-                x.view(-1, self.encoder_num_hidden * 2 + self.T - 1))
+            x = self.encoder_attn(x.view(-1, self.encoder_num_hidden * 2 + self.T - 1))
 
             # get weights by softmax
             alpha = F.softmax(x.view(-1, self.input_size))
@@ -109,8 +106,7 @@ class Encoder(nn.Module):
         """
         # hidden state and cell state [num_layers*num_directions, batch_size, hidden_size]
         # https://pytorch.org/docs/master/nn.html?#lstm
-        initial_states = Variable(X.data.new(
-            1, X.size(0), self.encoder_num_hidden).zero_())
+        initial_states = Variable(X.data.new(1, X.size(0), self.encoder_num_hidden).zero_())
         return initial_states
 
 
@@ -214,7 +210,7 @@ class DA_rnn(nn.Module):
         self.X = X
         self.y = y
 
-        self.Encoder = Encoder(input_size=X.shape[1],
+        self.Encoder = Encoder(input_size=X.shape[1], # Nro de caracteristicas ou colunas
                                encoder_num_hidden=encoder_num_hidden,
                                T=T).to(device)
         self.Decoder = Decoder(encoder_num_hidden=encoder_num_hidden,
@@ -294,10 +290,8 @@ class DA_rnn(nn.Module):
                 plt.ioff()
                 plt.figure()
                 plt.plot(range(1, 1 + len(self.y)), self.y, label="True")
-                plt.plot(range(self.T, len(y_train_pred) + self.T),
-                         y_train_pred, label='Predicted - Train')
-                plt.plot(range(self.T + len(y_train_pred), len(self.y) + 1),
-                         y_test_pred, label='Predicted - Test')
+                plt.plot(range(self.T, len(y_train_pred) + self.T), y_train_pred, label='Predicted - Train')
+                plt.plot(range(self.T + len(y_train_pred), len(self.y) + 1), y_test_pred, label='Predicted - Test')
                 plt.legend(loc='upper left')
                 plt.show()
 
@@ -356,6 +350,7 @@ class DA_rnn(nn.Module):
         while i < len(y_pred):
             batch_idx = np.array(range(len(y_pred)))[i: (i + self.batch_size)]
             X = np.zeros((len(batch_idx), self.T - 1, self.X.shape[1]))
+            
             y_history = np.zeros((len(batch_idx), self.T - 1))
 
             for j in range(len(batch_idx)):
@@ -379,3 +374,30 @@ class DA_rnn(nn.Module):
             i += self.batch_size
 
         return y_pred
+
+    def save_model(self, filepath):
+        checkpoint = {'model': self,
+                'state_dict': self.state_dict(),
+                'encoder_optimizer' : self.encoder_optimizer.state_dict(),
+                'decoder_optimizer' : self.decoder_optimizer.state_dict()}
+        
+        torch.save(checkpoint, filepath)
+
+    def load_checkpoint(self, filepath):
+        checkpoint = torch.load(filepath)
+        model = checkpoint['model']
+        model.load_state_dict(checkpoint['state_dict'])
+        #for parameter in model.parameters():
+        #    parameter.requires_grad = False
+
+        model.eval()
+
+        optimizer = 0 
+        optimizer.load_state_dict(checkpoint['encoder_optimizer'])
+        
+        for parameter in model.parameters():
+            parameter.requires_grad = False
+
+        optimizer.eval()
+        return model, optimizer
+
