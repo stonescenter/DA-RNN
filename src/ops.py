@@ -7,8 +7,40 @@
 import numpy as np
 import pandas as pd
 
+from sklearn.preprocessing import MinMaxScaler
 
-def read_data(input_path, debug=True):
+def load_data_series(input_path, n_columns, idx_class, normalise):
+
+    dataframe = pd.read_csv(input_path, header=0, index_col=['Date'], engine='python')
+   
+    scaler = MinMaxScaler(feature_range=(0, 1))
+    data = []
+
+    if normalise:            
+        data = scaler.fit_transform(dataframe.values)
+        data = pd.DataFrame(data)
+    else:
+        data = pd.DataFrame(dataframe.values)
+      
+    x_data = data.iloc[0:,0:n_columns]
+    y_data = data.iloc[0:,0:idx_class]
+    y_data = y_data.shift(-1, axis=0)
+    
+    frame = [x_data, y_data]
+    result = pd.concat(frame, axis=1)
+    result = result.dropna()
+
+    x_data = result.iloc[0:,0:n_columns]
+    y_data = result.iloc[0:,-idx_class:]
+    
+       
+    print("[Data] shape data X: ", x_data.shape)
+    print("[Data] shape data y: ", y_data.shape)
+
+
+    return (x_data.values, y_data.values)
+
+def read_data(input_path, normalise=True, debug=True):
     """Read nasdaq stocks data.
 
     Args:
@@ -20,10 +52,18 @@ def read_data(input_path, debug=True):
 
     """
     df = pd.read_csv(input_path, nrows=250 if debug else None)
+
+    scaler = MinMaxScaler(feature_range=(0, 1))
+    
+    if normalise:
+        df = scaler.fit_transform(df)
+        df = pd.DataFrame(df)
+
     X = df.iloc[:, 0:-1].values
     y = df.iloc[:, -1].values
 
     return X, y
+
 
 
 def train_val_test_split(X, y, is_Val):
