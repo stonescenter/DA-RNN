@@ -289,6 +289,7 @@ class DA_rnn(nn.Module):
                 y_pred = np.concatenate((y_train_pred, y_test_pred))
                 plt.ioff()
                 plt.figure()
+                fig, ax = plt.subplots(figsize=(12, 10))
                 plt.plot(range(1, 1 + len(self.y)), self.y, label="True")
                 plt.plot(range(self.T, len(y_train_pred) + self.T), y_train_pred, label='Predicted - Train')
                 plt.plot(range(self.T + len(y_train_pred), len(self.y) + 1), y_test_pred, label='Predicted - Test')
