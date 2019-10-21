@@ -12,7 +12,8 @@ import torch.nn.functional as F
 
 # https://www.programcreek.com/python/example/104440/torch.nn.functional.nll_loss
 
-writer = SummaryWriter('runs')
+# change if you will use in local machine
+writer = SummaryWriter(log_dir='/content/cloned-repo/runs')
 
 class Autoencoder(nn.Module):
     def __init__(self, device, epochs, original_dim, intermediate_dim):
