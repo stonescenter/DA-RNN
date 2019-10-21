@@ -4,9 +4,15 @@ import os
 import torch
 from torch import nn
 from torch.autograd import Variable
+from torch.utils.tensorboard import SummaryWriter
+
 import torch.nn.functional as F
 
+
+
 # https://www.programcreek.com/python/example/104440/torch.nn.functional.nll_loss
+
+writer = SummaryWriter('runs')
 
 class Autoencoder(nn.Module):
     def __init__(self, device, epochs, original_dim, intermediate_dim):
@@ -58,14 +64,14 @@ class Autoencoder(nn.Module):
                 inputs = Variable(inputs).to(self.device)
                 output = self.forward(inputs)
                 loss = self.criterion(output, inputs)
-                #self.optimizer.zero_grad()
+                
+                self.optimizer.zero_grad()
                 loss.backward()
                 self.optimizer.step()
                 
-            print('epoch=%s, loss=%s' % ( epoch, loss.item()))
-
-        self.save_model('../saved/simple_autoencoder.pth')
-
+            print('[Model] epoch=%s, loss=%s' % ( epoch, loss.item()))
+            writer.add_scalar('Train/Loss', loss.item(), epoch)
+        
     # def test(self, test_loader):       
 
     #     self.eval()
