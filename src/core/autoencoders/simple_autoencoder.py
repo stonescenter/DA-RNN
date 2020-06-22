@@ -7,13 +7,14 @@ from torch.autograd import Variable
 from torch.utils.tensorboard import SummaryWriter
 
 import torch.nn.functional as F
+from livelossplot import PlotLosses
 
 
 
 # https://www.programcreek.com/python/example/104440/torch.nn.functional.nll_loss
 
 # change if you will use in local machine
-writer = SummaryWriter(log_dir='/content/cloned-repo/runs')
+#writer = SummaryWriter(log_dir='/content/cloned-repo/runs')
 
 class Autoencoder(nn.Module):
     def __init__(self, device, epochs, original_dim, intermediate_dim):
@@ -43,36 +44,115 @@ class Autoencoder(nn.Module):
             nn.Tanh())
 
         learning_rate = 1e-3
-        self.criterion = nn.MSELoss()
+        #self.criterion = nn.MSELoss()
+        self.criterion = nn.MSELoss(reduction='sum')
         self.optimizer = torch.optim.Adam(self.parameters(),
             lr=learning_rate, weight_decay=1e-5)
         
         self.device = device
+
+    def accuracy(model, data_x, data_y, pct_close):
+        # data_x and data_y are numpy array-of-arrays matrices
+        n_feat = len(data_x[0])  # number features
+        n_items = len(data_x)    # number items
+        n_correct = 0; n_wrong = 0
+        for i in range(n_items):
+            X = T.Tensor(data_x[i])
+            # Y = T.Tensor(data_y[i])  # not needed
+            oupt = model(X)            # Tensor
+            pred_y = oupt.item()       # scalar
+
+            if np.abs(pred_y - data_y[i]) < \
+                np.abs(pct_close * data_y[i]):
+                n_correct += 1
+            else:
+                n_wrong += 1
+        return (n_correct * 100.0) / (n_correct + n_wrong)
 
     def forward(self, x):
         x = self.encoder(x)
         x = self.decoder(x)
         return x
 
-    def train(self, train_loader):
+    def train_model(self, train_loader):
 
         for epoch in range(self.num_epochs):
+            logs = {}
             for inputs, labels in train_loader:
 
                 inputs = torch.DoubleTensor(inputs).to(self.device)
-                #inputs = torch.DoubleTensor(inputs)
-                self.optimizer.zero_grad()
+                #self.optimizer.zero_grad()
                 inputs = Variable(inputs).to(self.device)
-                output = self.forward(inputs)
-                loss = self.criterion(output, inputs)
+
+                #self.optimizer.zero_grad()
+                outputs = self.forward(inputs)
+                loss = self.criterion(outputs, inputs)
                 
+                #for train
                 self.optimizer.zero_grad()
                 loss.backward()
                 self.optimizer.step()
-                
+
             print('[Model] epoch=%s, loss=%s' % ( epoch, loss.item()))
-            writer.add_scalar('Train/Loss', loss.item(), epoch)
+            #writer.add_scalar('Train/Loss', loss.item(), epoch)
+
+    def train_advanced(self, data_loaders, show_plot=True):
+        liveloss = PlotLosses()
+
+        for epoch in range(self.num_epochs):
+            logs = {}
         
+            for phase in ['train', 'validation']:
+                if phase == 'train':
+                    self.train()
+                else:
+                    self.eval()
+
+                running_loss = 0.0
+                running_corrects = 0
+
+                for inputs, labels in data_loaders[phase]:
+
+                    inputs = torch.DoubleTensor(inputs).to(self.device)
+                    targets = torch.DoubleTensor(inputs).to(self.device)
+
+                    #inputs = torch.DoubleTensor(inputs)
+                    inputs = Variable(inputs).to(self.device)
+                    targets = Variable(targets).to(self.device)
+
+                    #self.optimizer.zero_grad()
+                    #outputs = self.forward(inputs)
+                    outputs = self.encoder(inputs)
+                    outputs = self.decoder(outputs)
+                    loss = self.criterion(outputs, inputs)
+                    
+                    if phase == 'train':
+                        self.optimizer.zero_grad()
+                        loss.backward()
+                        self.optimizer.step()
+
+                    _, preds = torch.max(outputs, 1)
+
+                    running_loss += loss.detach() * inputs.size(0)
+                    #running_corrects += torch.sum(preds == inputs.data)
+                
+                epoch_loss = running_loss / len(data_loaders[phase].dataset)
+                #epoch_acc = running_corrects.float() / len(data_loaders[phase].dataset)
+
+                prefix = ''
+                if phase == 'validation':
+                    prefix = 'val_'
+
+                    #print('[Model] epoch=%s, loss=%s , acc=%s' % ( epoch, loss.item(), epoch_acc.item))
+                    print('[Model] epoch=%s, loss1=%s, loss2=%s ' % ( epoch, loss.item(), epoch_loss.item()))
+
+                logs[prefix + 'log loss'] = epoch_loss.item()
+                #logs[prefix + 'accuracy'] = epoch_acc.item()
+                
+                if show_plot:
+                    liveloss.update(logs)
+                    liveloss.send()
+
     # def test(self, test_loader):       
 
     #     self.eval()
@@ -99,6 +179,9 @@ class Autoencoder(nn.Module):
     #     print("debug")
 
     def test(self, test_loader):
+
+        self.eval()
+
         predicted = []
         for inputs, labels in test_loader:
 
@@ -109,7 +192,47 @@ class Autoencoder(nn.Module):
             if str(self.device) == str('cuda'):
                 inputs, target = inputs.to(self.device), inputs.to(self.device)
             
+            #torch.DoubleTensor(inputs)
+            target = Variable(target)
+            inputs = Variable(inputs)
+            outputs = self.encoder(inputs) # devuelve com grd_fn
+            #outputs = outputs.detach()
 
+            # negative log likehood loss
+            print(outputs.size())
+            outputs = outputs.view(len(outputs), -1)
+            target = target.view(len(target),-1)
+
+            outputs = outputs.detach().cpu().numpy()
+            
+            predicted.append(outputs)
+
+        #return predicted.ravel()
+        results = []
+        for i in range(len(predicted)):
+            x = predicted[i]
+            for j in range(len(x)):
+                d = x[j]
+                results.append(d)
+        
+        return results
+
+    def test_advanced(self, test_loader):
+        
+        predicted = []
+
+        dtype = torch.float
+        device = torch.device(self.device)
+
+        for inputs, labels in test_loader:
+
+            #inputs = inputs.to(device)
+            inputs = inputs.type(torch.DoubleTensor)
+            target = inputs.type(torch.FloatTensor)
+
+            if str(self.device) == str('cuda'):
+                inputs, target = inputs.to(self.device), inputs.to(self.device)
+            
             #torch.DoubleTensor(inputs)
             target = Variable(target)
             inputs = Variable(inputs)
@@ -133,7 +256,6 @@ class Autoencoder(nn.Module):
                 results.append(d)
         
         return results
-
     def save_model(self, filepath):
         checkpoint = {'model': self,
                 'state_dict': self.state_dict()}
