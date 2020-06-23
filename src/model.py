@@ -235,7 +235,7 @@ class DA_rnn(nn.Module):
         self.train_timesteps = int(self.X.shape[0] * 0.7)
         self.input_size = self.X.shape[1]
 
-    def train(self):
+    def train(self, show_plot=False):
         """training process."""
         iter_per_epoch = int(np.ceil(self.train_timesteps * 1. / self.batch_size))
         self.iter_losses = np.zeros(self.epochs * iter_per_epoch)
@@ -276,25 +276,25 @@ class DA_rnn(nn.Module):
                     for param_group in self.decoder_optimizer.param_groups:
                         param_group['lr'] = param_group['lr'] * 0.9
 
-                self.epoch_losses[epoch] = np.mean(self.iter_losses[range(
-                    epoch * iter_per_epoch, (epoch + 1) * iter_per_epoch)])
+                self.epoch_losses[epoch] = np.mean(self.iter_losses[range(epoch * iter_per_epoch, (epoch + 1) * iter_per_epoch)])
 
             if epoch % 10 == 0:
                 print("Epochs: ", epoch, " Iterations: ", n_iter,
                       " Loss: ", self.epoch_losses[epoch])
 
-            if epoch % 10 == 0:
-                y_train_pred = self.test(on_train=True)
-                y_test_pred = self.test(on_train=False)
-                y_pred = np.concatenate((y_train_pred, y_test_pred))
-                plt.ioff()
-                plt.figure()
-                fig, ax = plt.subplots(figsize=(12, 10))
-                plt.plot(range(1, 1 + len(self.y)), self.y, label="True")
-                plt.plot(range(self.T, len(y_train_pred) + self.T), y_train_pred, label='Predicted - Train')
-                plt.plot(range(self.T + len(y_train_pred), len(self.y) + 1), y_test_pred, label='Predicted - Test')
-                plt.legend(loc='upper left')
-                plt.show()
+            if show_plot:
+                if epoch % 10 == 0:
+                    y_train_pred = self.test(on_train=True)
+                    y_test_pred = self.test(on_train=False)
+                    y_pred = np.concatenate((y_train_pred, y_test_pred))
+                    plt.ioff()
+                    plt.figure()
+                    fig, ax = plt.subplots(figsize=(12, 10))
+                    plt.plot(range(1, 1 + len(self.y)), self.y, label="True")
+                    plt.plot(range(self.T, len(y_train_pred) + self.T), y_train_pred, label='Predicted - Train')
+                    plt.plot(range(self.T + len(y_train_pred), len(self.y) + 1), y_test_pred, label='Predicted - Test')
+                    plt.legend(loc='upper left')
+                    plt.show()
 
             # # Save files in last iterations
             # if epoch == self.epochs - 1:
