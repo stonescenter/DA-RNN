@@ -199,7 +199,7 @@ class Autoencoder(nn.Module):
             #outputs = outputs.detach()
 
             # negative log likehood loss
-            print(outputs.size())
+            #print(outputs.size())
             outputs = outputs.view(len(outputs), -1)
             target = target.view(len(target),-1)
 
