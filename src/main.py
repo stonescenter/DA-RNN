@@ -1,6 +1,7 @@
 """Main pipeline of DA-RNN.
 
 @author Zhenye Na 05/21/2018
+@modified Steve Ataucuri 
 
 """
 
@@ -14,22 +15,25 @@ import pandas as pd
 from torch import nn
 from torch import optim
 import torch.nn.functional as F
-import matplotlib.pyplot as plt
-
-# from tqdm import tqdm
 from torch.autograd import Variable
+from torch.utils.data import DataLoader, Dataset, TensorDataset
 
+from math import sqrt
+from sklearn.metrics import r2_score
+from sklearn.metrics import classification_report
+from sklearn.metrics import roc_auc_score
+from sklearn.metrics import accuracy_score
+from sklearn.metrics import mean_absolute_error
+from sklearn.metrics import mean_squared_error
+from sklearn.model_selection import train_test_split
 
-from core.autoencoders.simple_autoencoder import Autoencoder
-from core.autoencoders.cnn_autoencoder import AutoencoderCNN
-
-from core.data.data_loader import TimeSeriesData
-
-from torch.utils.data import DataLoader
+import matplotlib.pyplot as plt
 
 #from ops import *
 from model import *
-
+from core.autoencoders.simple_autoencoder import Autoencoder
+from core.autoencoders.cnn_autoencoder import AutoencoderCNN
+from core.data.data_loader import TimeSeriesData
 
 def parse_args():
     """Parse arguments."""
@@ -40,21 +44,40 @@ def parse_args():
     parser.add_argument('--dataroot', type=str, default="../data/nasdaq100_padding-short.csv", help='path to dataset')
     #parser.add_argument('--dataroot', type=str, default="../data/BTC-USD-4H-24F.csv", help='path to dataset')
     
-    parser.add_argument('--batchsize', type=int, default=128, help='input batch size [128]')
+    parser.add_argument('--batchsize', type=int, default=64, help='input batch size [128]')
 
     # Encoder / Decoder parameters setting
-    parser.add_argument('--nhidden_encoder', type=int, default=128, help='size of hidden states for the encoder m [64, 128]')
-    parser.add_argument('--nhidden_decoder', type=int, default=128, help='size of hidden states for the decoder p [64, 128]')
+    parser.add_argument('--nhidden_encoder', type=int, default=64, help='size of hidden states for the encoder m [64, 128]')
+    parser.add_argument('--nhidden_decoder', type=int, default=64, help='size of hidden states for the decoder p [64, 128]')
     parser.add_argument('--ntimestep', type=int, default=10, help='the number of time steps in the window T [10]')
 
     # Training parameters setting
-    parser.add_argument('--epochs', type=int, default=70, help='number of epochs to train [10, 200, 500]')
+    parser.add_argument('--epochs', type=int, default=50, help='number of epochs to train [10, 200, 500]')
     parser.add_argument('--lr', type=float, default=0.001, help='learning rate [0.001] reduced by 0.1 after each 10000 iterations')
 
     # parse the arguments
     args = parser.parse_args()
 
     return args
+
+def calc_score(y_true, y_predicted, report=False):
+
+    r2 = r2_score(y_true, y_predicted)
+    mse = mean_squared_error(y_true, y_predicted)
+    rmse = sqrt(mean_squared_error(y_true, y_predicted))
+    mae = mean_absolute_error(y_true, y_predicted)
+
+    report_string = ""
+    report_string += "---Regression Scores--- \n"
+    report_string += "\tR_2 statistics        (R2)  = " + str(round(r2,3)) + "\n"
+    report_string += "\tMean Square Error     (MSE) = " + str(round(mse,3)) + "\n"
+    report_string += "\tRoot Mean Square Error(RMSE) = " + str(round(rmse,3)) + "\n"
+    report_string += "\tMean Absolute Error   (MAE) = " + str(round(mae,3)) + "\n"
+
+    if report:
+        return r2, mse, rmse, mae, report_string
+    else:
+        return r2, mse, rmse, mae
 
 
 def main():
@@ -77,55 +100,101 @@ def main():
     idx_class = 1
     batch_size = 128
 
-    #X, y = read_data(args.dataroot, normalise=True, debug=False)
-    #X, y = load_data_series('../data/BTC-USD-4H-24F.csv', n_features, idx_class, Normalise)
-    #y = y.reshape(-1,)
+    args_autoenc = {
+        'seed':7070,
+        'batchsize': 128,
+        'lr': 0.001,
+        'epochs': 20,
+        'features': 24,        # numero de caracteristicas na entrada
+        'nhidden_encoder': 8,  # numero de caracteristicas da camada intermedia do Autoencoder
+        'idx_class': 1,        # indice da classe a aprender nos dados neste caso 1 ou seja High
+        'normalise': True
+    }  
 
-    #print(X.shape)
-    #print(y.shape)
+    # Reading data
+    print("==> Reading Data ...")
 
+    path_file = '../data/BTC-USD-4H-24F.csv'
 
-    dataset = TimeSeriesData('../data/BTC-USD-4H-24F.csv', n_features, idx_class, Normalise)
-    X, y = dataset.load_data_series(0)
-    y = y.reshape(-1,)
-    print(X.shape)
-    print(y.shape)
-
-    #dataset_train = TimeSeriesData('../data/BTC-USD-4H-24F-train.csv', n_features, idx_class, Normalise)
-    #dataset_test = TimeSeriesData('../data/BTC-USD-4H-24F-test.csv', n_features, idx_class, Normalise)
+    ts_data = TimeSeriesData(path_file, 
+                             args_autoenc['features'], 
+                             args_autoenc['idx_class'], 
+                             args_autoenc['normalise'])    
+ 
+    X, y = ts_data.load_data_series(0)
+    y = y.reshape(-1, 1)
     
+    x_train, x_test, y_train, y_test = train_test_split(X, y, test_size=0.80, random_state=42)
+    x_test, x_val, y_test, y_val = train_test_split(x_test, y_test, test_size=0.2, random_state=42)
+
+    print("dataset orig ", X.shape)
+    print("x_train %s, y_train %s" % (x_train.shape, y_train.shape))
+    print("x_test %s, y_test %s" % (x_test.shape, y_test.shape))
+    print("x_val %s, y_val %s" % (x_val.shape, y_val.shape))
+
+    print("x_train %s, y_train %s" % (x_train.shape, y_train.shape))
+    print("x_test %s, y_test %s" % (x_test.shape, y_test.shape))
     # cargamos os loaders
-    train_loader = DataLoader(dataset=dataset, batch_size=batch_size, shuffle=True)
-    #test_loader = DataLoader(dataset=dataset_test, batch_size=batch_size, shuffle=True)
+    #train_loader = DataLoader(dataset=ts_data, batch_size=batch_size, shuffle=True)
+    
+    
+    train_loader = DataLoader(TensorDataset(torch.from_numpy(x_train), torch.from_numpy(y_train)),
+                                batch_size=args_autoenc['batchsize'], shuffle=True)
+    test_loader = DataLoader(TensorDataset(torch.from_numpy(x_test), torch.from_numpy(y_test)),
+                                batch_size=args_autoenc['batchsize'], shuffle=True)
+    val_loader = DataLoader(TensorDataset(torch.from_numpy(x_val), torch.from_numpy(y_val)),
+                                batch_size=args_autoenc['batchsize'], shuffle=True)
 
-
+    dataloaders = {
+        "train": train_loader,
+        "validation": val_loader
+    }
+    
     loadModel = True
-    path_saved = '../saved/simple_autoencoder.pth'
+    path_saved = 'simple_autoencoder.pth'
+
+    # Autoencoder model
+    print("==> Initialize Auto-Encoder model ...")
 
     autoencoder = Autoencoder(device, num_epochs, n_features, intermediate).double().to(device)
 
     if loadModel:
-        print('[Model] loading pre-training values ...')
+        print('==> Loading pre-training values ...')
         #device = 'cpu'
         autoencoder = Autoencoder(device, num_epochs, n_features, intermediate).to(device).load_checkpoint(path_saved)
     else:
-        print('training....')
-        autoencoder.train(train_loader)
+        print('==> Training Auto-Encoder ...')
+        autoencoder.train_advanced(dataloaders, show_plot=False)
+        #autoencoder.train_model(train_loader)
+        autoencoder.save_model(path_saved)
+        
+      
+    #predicted = autoencoder.train_advanced(test_loader)
+    encoder_layer = autoencoder.test(test_loader, 'encoder')
 
-    predicted = autoencoder.test(train_loader)
-    predicted = np.array(predicted)
-    print(len(predicted))
-    X = predicted
-    print(X.shape)
-    print(y.shape)
+    encoder_layer_ = DataLoader(TensorDataset(torch.from_numpy(np.array(encoder_layer)), torch.from_numpy(y_test)),
+                                batch_size=args_autoenc['batchsize'], shuffle=True)
 
+    pred_input = autoencoder.test(encoder_layer_, 'decoder') 
+    pred_input = np.array(pred_input)
+
+    print("pred output  : ", pred_input.shape)
+    print('y target     : ', y.shape)
+
+    # metrics
+    print("==> Metrics for Auto-Encoder ...")
+    _,_,_,_, results = calc_score(x_test, pred_input, report=True)
+    print(results)
 
     # Initialize model
     print("==> Initialize DA-RNN model ...")
 
+    y = y_test.reshape(-1, )
+    encoder_layer = np.array(encoder_layer)    
+
     loadModel = False
     model = DA_rnn(
-            X,
+            encoder_layer,
             y,
             args.ntimestep,
             args.nhidden_encoder,
@@ -137,16 +206,18 @@ def main():
 
     if loadModel:
         print('loading model ...')
-        model, opt = model.load_checkpoint('../saved/checkpoint.pth')
+        model, opt = model.load_checkpoint('checkpoint.pth')
         print(model)
     
     # Train
     print("==> Start training ...")
+
+    print('shape dataset : %s ', encoder_layer.shape)
     model.train()
 
     # Prediction
     y_pred = model.test()
-    model.save_model('../saved/checkpoint.pth')
+    model.save_model('checkpoint.pth')
     print(model)
     
     fig1 = plt.figure()
