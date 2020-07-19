@@ -93,5 +93,8 @@ class TimeSeriesData(Dataset):
 	def __len__(self):
 		return self.len
 
-	def inverse_transform(self, x):
-		return self.scaler.inverse_transform(x)
+	def inverse_transform_x(self, x):
+		return self.x_scaler.inverse_transform(x)
+		
+	def inverse_transform_x(self, y):
+		return self.y_scaler.inverse_transform(y)		
