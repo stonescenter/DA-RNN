@@ -1,34 +1,41 @@
 import numpy as np
 import pandas as pd
+from enum import Enum
 
 from torch.utils.data import Dataset, DataLoader
 
-from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import MinMaxScaler, StandardScaler
+
+class KindNormalization(Enum):
+	Scaling = 1,
+	Zscore = 2,
 
 class TimeSeriesData(Dataset):
-	def __init__(self, input_path, n_columns, idx_class, normalise):
+	def __init__(self, input_path, n_columns, idx_class, normalise, kind_normalization):
 
 		np.set_printoptions(suppress=True)
 
 		# com index_col ja não inclui a coluna index 
 		dataframe = pd.read_csv(input_path, header=0, index_col=['Date'], engine='python')
 
-		self.scaler = MinMaxScaler(feature_range=(0, 1))
+		#self.x_scaler = MinMaxScaler(feature_range=(0, 1))
 		data = []
 
-		if normalise:            
-		    data = self.scaler.fit_transform(dataframe.values)
-		    data = pd.DataFrame(data)
-		else:
-		    data = pd.DataFrame(dataframe.values)
+		if kind_normalization == KindNormalization.Zscore:
+			self.x_scaler = StandardScaler() # mean and standart desviation
+			self.y_scaler = StandardScaler() # mean and standart desviation
+
+		elif kind_normalization== KindNormalization.Scaling:
+			self.x_scaler = MinMaxScaler(feature_range=(0, 1))
+			self.y_scaler = MinMaxScaler(feature_range=(0, 1))
 
 		#i_split = round(len(data) * split)
 		#print("[Data] Splitting data at %d with %s" %(i_split, split))
 
 		# iloc é uma propiedade que funciona so com Dataframe e não se apliquei df.values
 
-		x_data = data.iloc[0:,0:n_columns]
-		y_data = data.iloc[0:,0:idx_class]
+		x_data = dataframe.iloc[0:,0:n_columns]
+		y_data = dataframe.iloc[0:,0:idx_class]
 		y_data = y_data.shift(-1, axis=0)
 
 		frame = [x_data, y_data]
@@ -36,9 +43,18 @@ class TimeSeriesData(Dataset):
 		result = result.dropna()
 
 		self.x_data = result.iloc[0:,0:n_columns]
-		self.y_data = result.iloc[0:,-idx_class:]
+		self.y_data = result.iloc[0:,-idx_class:] # the last column
 		
-		self.len = len(self.x_data)   
+		self.len = len(self.x_data) 
+
+		if normalise:
+			self.x_data = self.x_scaler.fit_transform(self.x_data)
+			self.y_data = self.y_scaler.fit_transform(self.y_data)
+			self.x_data = pd.DataFrame(self.x_data)
+			self.y_data = pd.DataFrame(self.y_data)
+		#else:
+			#data = pd.DataFrame(dataframe.values)
+
 		print("[Data] shape data X: ", self.x_data.shape)
 		print("[Data] shape data y: ", self.y_data.shape)
 		print('[Data] len:', self.len)
