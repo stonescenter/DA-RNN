@@ -95,6 +95,6 @@ class TimeSeriesData(Dataset):
 
 	def inverse_transform_x(self, x):
 		return self.x_scaler.inverse_transform(x)
-		
-	def inverse_transform_x(self, y):
+
+	def inverse_transform_y(self, y):
 		return self.y_scaler.inverse_transform(y)		
