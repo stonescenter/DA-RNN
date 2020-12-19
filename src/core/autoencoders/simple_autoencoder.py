@@ -177,9 +177,9 @@ class Autoencoder(nn.Module):
                 logs[prefix + 'log loss'] = epoch_loss.item()
                 logs[prefix + 'accuracy'] = epoch_acc
                 
-                if show_plot:
-                    liveloss.update(logs)
-                    liveloss.send()
+            if show_plot:
+                liveloss.update(logs)
+                liveloss.send()
 
     # def test(self, test_loader):       
 
