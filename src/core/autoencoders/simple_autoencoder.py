@@ -17,13 +17,15 @@ import numpy as np
 #writer = SummaryWriter(log_dir='/content/cloned-repo/runs')
 
 class Autoencoder(nn.Module):
-    def __init__(self, device, epochs, original_dim, intermediate_dim):
+    def __init__(self, device, epochs, learning_rate, original_dim, intermediate_dim):
 
         super(Autoencoder, self).__init__()
         self.original_dim = original_dim
         self.intermediate_dim = intermediate_dim
         self.num_epochs = epochs
+        self.lr = learning_rate
 
+        
         self.encoder = nn.Sequential(
             nn.Linear(original_dim, 20),
             nn.ReLU(True),
@@ -42,12 +44,32 @@ class Autoencoder(nn.Module):
             nn.ReLU(True), 
             nn.Linear(20, original_dim),
             nn.Tanh())
+        
+        '''
+        self.encoder = nn.Sequential(
+            nn.Linear(original_dim, 20),
+            nn.Tanh(),
+            nn.Linear(20, 15),
+            nn.Tanh(), 
+            nn.Linear(15, 12),
+            nn.Tanh(),
+            nn.Linear(12, intermediate_dim))
+        
+        self.decoder = nn.Sequential(
+            nn.Linear(intermediate_dim, 12),
+            nn.Tanh(),
+            nn.Linear(12, 15),
+            nn.Tanh(),
+            nn.Linear(15, 20),
+            nn.Tanh(), 
+            nn.Linear(20, original_dim),
+            nn.Tanh())
 
-        learning_rate = 1e-3
+        '''
         #self.criterion = nn.MSELoss()
         self.criterion = nn.MSELoss(reduction='sum')
-        self.optimizer = T.optim.Adam(self.parameters(),
-            lr=learning_rate, weight_decay=1e-5)
+        self.optimizer = T.optim.AdamW(self.parameters(),
+            lr=self.lr, weight_decay=1e-5)
         
         self.device = device
     '''
@@ -68,7 +90,7 @@ class Autoencoder(nn.Module):
                     n_wrong += 1
             return (n_correct * 100.0) / (n_correct + n_wrong)
     '''
-    def accuracy(self, y_true, y_pred, close_to=0.05):
+    def accuracy(self, y_true, y_pred, close_to=0.01):
         # data_x and data_y are numpy array-of-arrays matrices
         n_feat = len(y_true[0])  # number features
         n_items = len(y_true)    # number items
