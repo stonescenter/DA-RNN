@@ -196,6 +196,7 @@ class DA_rnn(nn.Module):
                  batch_size,
                  learning_rate,
                  epochs,
+                 train_size=0.70,
                  parallel=False):
         """da_rnn initialization."""
         super(DA_rnn, self).__init__()
@@ -206,7 +207,7 @@ class DA_rnn(nn.Module):
         self.parallel = parallel
         self.shuffle = False
         self.epochs = epochs
-        self.T = T
+        self.T = T # timesteps
         self.X = X
         self.y = y
 
@@ -232,8 +233,10 @@ class DA_rnn(nn.Module):
                                             lr=self.learning_rate)
 
         # Training set
-        self.train_timesteps = int(self.X.shape[0] * 0.7)
+        self.train_timesteps = int(self.X.shape[0] * train_size)
         self.input_size = self.X.shape[1]
+
+        print('train_timesteps %s, input_size %s' % (self.train_timesteps, self.input_size))
 
     def train(self, show_plot=False):
         """training process."""
@@ -318,15 +321,12 @@ class DA_rnn(nn.Module):
         self.encoder_optimizer.zero_grad()
         self.decoder_optimizer.zero_grad()
 
-        input_weighted, input_encoded = self.Encoder(
-            Variable(torch.from_numpy(X).type(torch.FloatTensor).to(device)))
-        y_pred = self.Decoder(input_encoded, Variable(
-            torch.from_numpy(y_prev).type(torch.FloatTensor).to(device)))
+        input_weighted, input_encoded = self.Encoder(Variable(torch.from_numpy(X).type(torch.FloatTensor).to(device)))
+        y_pred = self.Decoder(input_encoded, Variable(torch.from_numpy(y_prev).type(torch.FloatTensor).to(device)))
 
-        y_true = Variable(torch.from_numpy(
-            y_gt).type(torch.FloatTensor).to(device))
-
+        y_true = Variable(torch.from_numpy(y_gt).type(torch.FloatTensor).to(device))
         y_true = y_true.view(-1, 1)
+
         loss = self.criterion(y_pred, y_true)
         loss.backward()
 
@@ -356,22 +356,15 @@ class DA_rnn(nn.Module):
 
             for j in range(len(batch_idx)):
                 if on_train:
-                    X[j, :, :] = self.X[range(
-                        batch_idx[j], batch_idx[j] + self.T - 1), :]
-                    y_history[j, :] = self.y[range(
-                        batch_idx[j], batch_idx[j] + self.T - 1)]
+                    X[j, :, :] = self.X[range(batch_idx[j], batch_idx[j] + self.T - 1), :]
+                    y_history[j, :] = self.y[range(batch_idx[j], batch_idx[j] + self.T - 1)]
                 else:
-                    X[j, :, :] = self.X[range(
-                        batch_idx[j] + self.train_timesteps - self.T, batch_idx[j] + self.train_timesteps - 1), :]
-                    y_history[j, :] = self.y[range(
-                        batch_idx[j] + self.train_timesteps - self.T, batch_idx[j] + self.train_timesteps - 1)]
+                    X[j, :, :] = self.X[range(batch_idx[j] + self.train_timesteps - self.T, batch_idx[j] + self.train_timesteps - 1), :]
+                    y_history[j, :] = self.y[range(batch_idx[j] + self.train_timesteps - self.T, batch_idx[j] + self.train_timesteps - 1)]
 
-            y_history = Variable(torch.from_numpy(
-                y_history).type(torch.FloatTensor).to(device))
-            _, input_encoded = self.Encoder(
-                Variable(torch.from_numpy(X).type(torch.FloatTensor).to(device)))
-            y_pred[i:(i + self.batch_size)] = self.Decoder(input_encoded,
-                                                           y_history).cpu().data.numpy()[:, 0]
+            y_history = Variable(torch.from_numpy(y_history).type(torch.FloatTensor).to(device))
+            _, input_encoded = self.Encoder(Variable(torch.from_numpy(X).type(torch.FloatTensor).to(device)))
+            y_pred[i:(i + self.batch_size)] = self.Decoder(input_encoded, y_history).cpu().data.numpy()[:, 0]
             i += self.batch_size
 
         return y_pred

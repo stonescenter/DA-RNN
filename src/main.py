@@ -33,7 +33,7 @@ import matplotlib.pyplot as plt
 from model import *
 from core.autoencoders.simple_autoencoder import Autoencoder
 from core.autoencoders.cnn_autoencoder import AutoencoderCNN
-from core.data.data_loader import TimeSeriesData
+from core.data.data_loader import TimeSeriesData, KindNormalization
 
 def parse_args():
     """Parse arguments."""
@@ -52,8 +52,9 @@ def parse_args():
     parser.add_argument('--ntimestep', type=int, default=10, help='the number of time steps in the window T [10]')
 
     # Training parameters setting
-    parser.add_argument('--epochs', type=int, default=50, help='number of epochs to train [10, 200, 500]')
+    parser.add_argument('--epochs', type=int, default=70, help='number of epochs to train [10, 200, 500]')
     parser.add_argument('--lr', type=float, default=0.001, help='learning rate [0.001] reduced by 0.1 after each 10000 iterations')
+    parser.add_argument('--train_size', type=float, default=0.7, help='train_split')
 
     # parse the arguments
     args = parser.parse_args()
@@ -105,7 +106,7 @@ def main():
         'batchsize': 128,
         'lr': 0.001,
         'epochs': 20,
-        'features': 24,        # numero de caracteristicas na entrada
+        'features': 25,        # numero de caracteristicas na entrada
         'nhidden_encoder': 8,  # numero de caracteristicas da camada intermedia do Autoencoder
         'idx_class': 1,        # indice da classe a aprender nos dados neste caso 1 ou seja High
         'normalise': True
@@ -119,7 +120,8 @@ def main():
     ts_data = TimeSeriesData(path_file, 
                              args_autoenc['features'], 
                              args_autoenc['idx_class'], 
-                             args_autoenc['normalise'])    
+                             args_autoenc['normalise'],
+                             KindNormalization.Scaling)    
  
     X, y = ts_data.load_data_series(0)
     y = y.reshape(-1, 1)
@@ -132,8 +134,6 @@ def main():
     print("x_test %s, y_test %s" % (x_test.shape, y_test.shape))
     print("x_val %s, y_val %s" % (x_val.shape, y_val.shape))
 
-    print("x_train %s, y_train %s" % (x_train.shape, y_train.shape))
-    print("x_test %s, y_test %s" % (x_test.shape, y_test.shape))
     # cargamos os loaders
     #train_loader = DataLoader(dataset=ts_data, batch_size=batch_size, shuffle=True)
     
@@ -156,12 +156,20 @@ def main():
     # Autoencoder model
     print("==> Initialize Auto-Encoder model ...")
 
-    autoencoder = Autoencoder(device, num_epochs, n_features, intermediate).double().to(device)
+    autoencoder = Autoencoder(device, 
+                        epochs = args_autoenc['epochs'], 
+                        learning_rate = args_autoenc['lr'],
+                        original_dim = args_autoenc['features'],
+                        intermediate_dim = args_autoenc['nhidden_encoder']        ).double().to(device)
 
     if loadModel:
         print('==> Loading pre-training values ...')
         #device = 'cpu'
-        autoencoder = Autoencoder(device, num_epochs, n_features, intermediate).to(device).load_checkpoint(path_saved)
+        autoencoder = Autoencoder(device,
+                        epochs = args_autoenc['epochs'], 
+                        learning_rate = args_autoenc['lr'],
+                        original_dim = args_autoenc['features'],
+                        intermediate_dim = args_autoenc['nhidden_encoder']).to(device).load_checkpoint(path_saved)
     else:
         print('==> Training Auto-Encoder ...')
         autoencoder.train_advanced(dataloaders, show_plot=False)
@@ -189,37 +197,57 @@ def main():
     # Initialize model
     print("==> Initialize DA-RNN model ...")
 
+    """default arguments for attention"""
+    args = {
+        'seed':7071,
+        'ntimestep': 10,
+        'nhidden_encoder': 128,
+        'nhidden_decoder': 128,
+        'batchsize': 32,
+        'lr': 0.001,
+        'epochs': 20,
+        'train_size': 0.7
+    }   
+
     y = y_test.reshape(-1, )
     encoder_layer = np.array(encoder_layer)    
 
     loadModel = False
     model = DA_rnn(
-            encoder_layer,
-            y,
-            args.ntimestep,
-            args.nhidden_encoder,
-            args.nhidden_decoder,
-            args.batchsize,
-            args.lr,
-            args.epochs
-        )
+        encoder_layer,
+        y,
+        args["ntimestep"],
+        args["nhidden_encoder"],
+        args["nhidden_decoder"],
+        args["batchsize"],
+        args["lr"],
+        args["epochs"], 
+        args["train_size"]        
+    )
 
     if loadModel:
         print('loading model ...')
         model, opt = model.load_checkpoint('checkpoint.pth')
-        print(model)
-    
-    # Train
-    print("==> Start training ...")
+    else:
+        # Train
+        print("==> Start training ...")
+        print('shape dataset : %s ', encoder_layer.shape)
+        model.train()
 
-    print('shape dataset : %s ', encoder_layer.shape)
-    model.train()
 
     # Prediction
+    y_true = model.y[model.train_timesteps:]
     y_pred = model.test()
+
+    print('shape y_true : %s y_pred : %s' % (y_true.shape, y_pred.shape))
+
+    # metrics
+    print("==> Metrics for Prediction ...")
+    _,_,_,_, results = calc_score(y_true, y_pred, report=True)
+    print(results)
+
     model.save_model('checkpoint.pth')
-    print(model)
-    
+
     fig1 = plt.figure()
     plt.semilogy(range(len(model.iter_losses)), model.iter_losses)
     plt.savefig("1.png")
@@ -232,7 +260,7 @@ def main():
 
     fig3 = plt.figure()
     plt.plot(y_pred, label='Predicted')
-    plt.plot(model.y[model.train_timesteps:], label="True")
+    plt.plot(y_true, label="True")
     plt.legend(loc='upper left')
     plt.savefig("3.png")
     plt.close(fig3)
