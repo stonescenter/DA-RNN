@@ -11,7 +11,7 @@ class KindNormalization(Enum):
 	Zscore = 2,
 
 class TimeSeriesData(Dataset):
-	def __init__(self, input_path, n_columns, idx_class, normalise, kind_normalization):
+	def __init__(self, input_path, n_columns, idx_class, normalise, kind_normalization, range=(0,1)):
 
 		np.set_printoptions(suppress=True)
 
@@ -26,8 +26,8 @@ class TimeSeriesData(Dataset):
 			self.y_scaler = StandardScaler() # mean and standart desviation
 
 		elif kind_normalization== KindNormalization.Scaling:
-			self.x_scaler = MinMaxScaler(feature_range=(0, 1))
-			self.y_scaler = MinMaxScaler(feature_range=(0, 1))
+			self.x_scaler = MinMaxScaler(feature_range=range)
+			self.y_scaler = MinMaxScaler(feature_range=range)
 
 		#i_split = round(len(data) * split)
 		#print("[Data] Splitting data at %d with %s" %(i_split, split))
