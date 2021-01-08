@@ -18,9 +18,6 @@ from torch import nn
 from torch import optim
 import torch.nn.functional as F
 
-device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-print("==> Use accelerator: ", device)
-
 
 class Encoder(nn.Module):
     """encoder in DA_RNN."""
@@ -46,8 +43,7 @@ class Encoder(nn.Module):
         # Eq. 8: W_e[h_{t-1}; s_{t-1}] + U_e * x^k
         self.encoder_attn = nn.Linear(
             in_features=2 * self.encoder_num_hidden + self.T - 1,
-            out_features=1,
-            bias=True
+            out_features=1
         )
 
     def forward(self, X):
@@ -79,7 +75,7 @@ class Encoder(nn.Module):
             x = self.encoder_attn(x.view(-1, self.encoder_num_hidden * 2 + self.T - 1))
 
             # get weights by softmax
-            alpha = F.softmax(x.view(-1, self.input_size))
+            alpha = F.softmax(x.view(-1, self.input_size), dim=1)
 
             # get new input for LSTM
             x_tilde = torch.mul(alpha, X[:, t, :])
@@ -146,7 +142,7 @@ class Decoder(nn.Module):
                            X_encoed), dim=2)
 
             beta = F.softmax(self.attn_layer(
-                x.view(-1, 2 * self.decoder_num_hidden + self.encoder_num_hidden)).view(-1, self.T - 1))
+                x.view(-1, 2 * self.decoder_num_hidden + self.encoder_num_hidden)).view(-1, self.T - 1), dim=1)
 
             # Eqn. 14: compute context vector
             # batch_size * encoder_hidden_size
@@ -211,12 +207,16 @@ class DA_rnn(nn.Module):
         self.X = X
         self.y = y
 
+        self.device = torch.device(
+            'cuda:0' if torch.cuda.is_available() else 'cpu')
+        print("==> Use accelerator: ", self.device)
+
         self.Encoder = Encoder(input_size=X.shape[1], # Nro de caracteristicas ou colunas
                                encoder_num_hidden=encoder_num_hidden,
-                               T=T).to(device)
+                               T=T).to(self.device)
         self.Decoder = Decoder(encoder_num_hidden=encoder_num_hidden,
                                decoder_num_hidden=decoder_num_hidden,
-                               T=T).to(device)
+                               T=T).to(self.device)
 
         # Loss function
         self.criterion = nn.MSELoss()
@@ -321,10 +321,10 @@ class DA_rnn(nn.Module):
         self.encoder_optimizer.zero_grad()
         self.decoder_optimizer.zero_grad()
 
-        input_weighted, input_encoded = self.Encoder(Variable(torch.from_numpy(X).type(torch.FloatTensor).to(device)))
-        y_pred = self.Decoder(input_encoded, Variable(torch.from_numpy(y_prev).type(torch.FloatTensor).to(device)))
+        input_weighted, input_encoded = self.Encoder(Variable(torch.from_numpy(X).type(torch.FloatTensor).to(self.device)))
+        y_pred = self.Decoder(input_encoded, Variable(torch.from_numpy(y_prev).type(torch.FloatTensor).to(self.device)))
 
-        y_true = Variable(torch.from_numpy(y_gt).type(torch.FloatTensor).to(device))
+        y_true = Variable(torch.from_numpy(y_gt).type(torch.FloatTensor).to(self.device))
         y_true = y_true.view(-1, 1)
 
         loss = self.criterion(y_pred, y_true)
@@ -362,8 +362,8 @@ class DA_rnn(nn.Module):
                     X[j, :, :] = self.X[range(batch_idx[j] + self.train_timesteps - self.T, batch_idx[j] + self.train_timesteps - 1), :]
                     y_history[j, :] = self.y[range(batch_idx[j] + self.train_timesteps - self.T, batch_idx[j] + self.train_timesteps - 1)]
 
-            y_history = Variable(torch.from_numpy(y_history).type(torch.FloatTensor).to(device))
-            _, input_encoded = self.Encoder(Variable(torch.from_numpy(X).type(torch.FloatTensor).to(device)))
+            y_history = Variable(torch.from_numpy(y_history).type(torch.FloatTensor).to(self.device))
+            _, input_encoded = self.Encoder(Variable(torch.from_numpy(X).type(torch.FloatTensor).to(self.device)))
             y_pred[i:(i + self.batch_size)] = self.Decoder(input_encoded, y_history).cpu().data.numpy()[:, 0]
             i += self.batch_size
 
